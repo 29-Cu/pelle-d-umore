@@ -1,21 +1,23 @@
 # Pelle d'Umore
-*Emotional Skin for AI Chat*
+
+Emotional Skin for AI Chat
+
+AI 聊天的情绪皮肤
 
 Give your AI companion a body language.
+赋予你的 AI 伴侣一种肢体语言。
 
-Most chat UIs render an assistant's words in the same flat, even voice no matter
-what those words are carrying. Pelle d'Umore lets the *persona itself* reach past
-the text and change how the room looks and feels — a phrase can glow, the whole
-screen can go blood-red and start to corrupt, the air can thicken to a slow wine
-breath, or the night can open into a sky full of stars. The model decides; the UI
-obeys.
+Most chat UIs render an assistant's words in the same flat, even voice no matter what those words are carrying.
+无论文字承载着什么情绪，大多数聊天界面呈现助手话语的方式，都是同样平淡且毫无波澜的。
+Pelle d'Umore lets the persona itself reach past the text and change how the room looks and feels — a phrase can glow, the whole screen can go blood-red and start to corrupt, the air can thicken to a slow wine breath, or the night can open into a sky full of stars.
+Pelle d'Umore 让 AI 人格本身穿透文本，直接改变房间的视觉和氛围——一句话可以发出微光，整个屏幕可以变得血红并开始崩坏，空气可以变得像缓慢呼出的酒气一样浓稠，或者黑夜可以就此向满天繁星敞开。
+The model decides; the UI obeys.
+模型发号施令，UI服从。
+It was born inside a private companion app and pulled out on its own because the idea is bigger than one app: any LLM persona can be given a face, if you let it drive a little bit of your CSS.
+它诞生于一个私人的伴侣应用中，随后被独立提取出来，因为这个想法比单一的应用更宏大：只要你允许它驱动一点点你的 CSS，任何LLM的人格都可以拥有一个情绪的皮肤。
+Zero dependencies. Four files. Drop them in, wire up two calls, teach your model a handful of tags.
+零依赖。四个文件。把它们丢进去，连上两个调用，教你的模型几个标签就好。
 
-It was born inside a private companion app and pulled out on its own because the
-idea is bigger than one app: **any** LLM persona can be given a face, if you let
-it drive a little bit of your CSS.
-
-Zero dependencies. Four files. Drop them in, wire up two calls, teach your model
-a handful of tags.
 
 ---
 
