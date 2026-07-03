@@ -1,0 +1,800 @@
+/* Pelle d'Umore — Emotional Skin for AI Chat | CC BY 4.0 — Attribution required | Created by Cu & Lunedì (cunedi.uk)
+ *
+ * mood.css — full-screen emotional mood skins (rage / rage2 / desire / vuoto / moonlight).
+ *
+ * Hangs on body[data-mood="rage" | "rage2" | "desire" | "vuoto" | "moonlight"] and
+ * overrides the theme tokens your engine writes on <html>.
+ * How the override wins: your theme engine writes --accent/--aurora/--chat-* etc.
+ * inline on <html>; a declaration on <body> beats a value inherited from <html>,
+ * so body[data-mood]{--accent:…} applies to the whole body subtree and overrides
+ * the engine, while <html> itself is untouched. Removing the attribute restores
+ * the user's personalization with zero residue (we only add the attribute + an
+ * override layer — no storage writes, no calls into your theme controller).
+ *
+ * Only transform / opacity / filter / text-shadow are animated. Colors are oklch()
+ * only, no hex. prefers-reduced-motion: all animation off, only color remains.
+ *
+ * ════════════════════════════════════════════════════════════════════════
+ *  INTEGRATION POINTS — adapt these to your app before the skins bite.
+ *
+ *  Selectors this file targets (rename to match your markup, or delete the rule
+ *  wholesale if you have no equivalent — not every architecture has a wallpaper
+ *  mask or an animated ambient layer):
+ *    .chat-wallpaper                 → your full-bleed background layer. rage/rage2
+ *                                      paint an opaque takeover on ::before + static
+ *                                      noise on ::after; desire/vuoto filter it;
+ *                                      moonlight scrims it (::before) and hosts the
+ *                                      star/meteor children mood.js injects.
+ *    .msg--assistant .assistant-msg  → your AI message body. Gets scanlines (::after),
+ *                                      the "bad signal" jitter (::before — assumes your
+ *                                      skin already uses ::before for a frosted panel;
+ *                                      drop that rule if not), the big-glitch text-shadow,
+ *                                      and the breath / gold-glow.
+ *    .chat-aurora                    → an animated ambient background element, if you
+ *                                      have one; vuoto freezes its drift. Delete if not.
+ *
+ *  Tokens this file redefines (rename to whatever your theme actually uses; redefine
+ *  the ones your host defines, ignore the rest):
+ *    --accent / --accent-* / --focus / --danger    accent + interactive-state colors
+ *    --bg / --aurora / --surface* / --border*       base surfaces + edges
+ *    --text* / --scrim / --glass-surface / --glow-* text ramp + glass
+ *    --chat-panel-* / --panel-solid / --home-card   AI panel tokens
+ *    --chat-me-* / --chat-scrim*                    user bubble + reading scrim
+ * ════════════════════════════════════════════════════════════════════════
+ *  TUNABLE PARAMS — a skin's own knobs live in the block right below. To retune a
+ *  skin, edit only that block.
+ *   · Frequency-class knobs (--mood-rage-corrupt-interval / --mood-rage-glitch-chance)
+ *     are read by mood.js via getComputedStyle.
+ *   · The scanline switch --mood-rage-scanline is used as an alpha multiplier (1=on / 0=off).
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/* —— Shared by rage + rage2: corruption / noise behavior params = single source of
+ *    truth, don't duplicate. The first few are read by mood.js via
+ *    getComputedStyle(document.body) or used by CSS as alpha multipliers; rage2 reuses
+ *    the same body[data-mood] selectors instead of forking its own copies. —— */
+body[data-mood="rage"],
+body[data-mood="rage2"] {
+  --mood-rage-scanline: 1;             /* scanline switch: 1 on / 0 off (alpha multiplier) */
+  --mood-rage-noise: 0.5;              /* static-noise strength 0..1 */
+  --mood-rage-corrupt-interval: 1500ms;/* ambient-corruption interval (read by mood.js) */
+  --mood-rage-glitch-chance: 0.24;     /* per-tick chance of a big glitch (read by mood.js) */
+  --mood-rage-signal-period: 7s;       /* "bad signal" jitter period for the blur mask (shared transform) */
+  --mood-rage-wall-period: 5.5s;       /* wallpaper glitch period (shared transform) */
+}
+
+body[data-mood="rage"] {
+  /* —— RAGE color params (dark ground, bright text) —— */
+  --mood-rage-hue: 22;                 /* primary hue (red) */
+  --mood-rage-chroma: 0.2;             /* primary chroma */
+  --mood-rage-scrim-depth: 0.55;       /* red-world shadow depth 0..1 (full-screen opaque; this knob controls the top/bottom black vignette) */
+}
+
+body[data-mood="rage2"] {
+  /* —— RAGE2 color params (red ground, black text; corruption timing reuses --mood-rage-* above) —— */
+  --mood-rage2-hue: 25;                /* primary hue (alarm red, one notch off rage's 22) */
+  --mood-rage2-chroma: 0.19;           /* primary chroma */
+  --mood-rage2-scrim-depth: 0.34;      /* red-world shadow depth 0..1 (full-screen opaque; controls the top/bottom black vignette) */
+}
+
+body[data-mood="desire"] {
+  /* —— DESIRE params —— */
+  --mood-desire-hue: 348;              /* primary hue (wine red toward plum — deliberately away from rage's scarlet 22) */
+  --mood-desire-chroma: 0.15;
+  --mood-desire-scrim-depth: 0.72;     /* lights down: scrim heavier than rage */
+  --mood-desire-breath: 3.4s;          /* AI-text breathing-glow period (3-4s) */
+  --mood-desire-wall-dim: 0.45;        /* wallpaper dim factor (brightness) */
+}
+
+body[data-mood="vuoto"] {
+  /* —— VUOTO ("the void") params: a world drained of color, all chroma 0, zero motion —— */
+  --mood-vuoto-wall-dim: 0.6;          /* wallpaper dim (brightness); grayscale + low contrast, then dimmed */
+}
+
+body[data-mood="moonlight"] {
+  /* —— MOONLIGHT (night talk) params —— */
+  --mood-moon-hue: 255;                /* night-sky hue (deep indigo) */
+  --mood-moon-star: 0.6;               /* starlight strength (star-layer opacity multiplier) */
+  --mood-moon-gold: 0.5;               /* AI-text pale-gold glow strength (text-shadow alpha multiplier) */
+  --mood-moon-meteor: 1;               /* meteor switch 1/0 (meteor opacity multiplier) */
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RAGE — signal corruption. Full-screen red/black takeover + scanlines +
+   garbled text + noise.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* —— Token override: accent / danger / bg / aurora / panel / user bubble all carried away —— */
+body[data-mood="rage"] {
+  --accent:        oklch(0.62 var(--mood-rage-chroma) var(--mood-rage-hue));
+  --accent-hover:  oklch(0.67 var(--mood-rage-chroma) var(--mood-rage-hue));
+  --accent-press:  oklch(0.55 var(--mood-rage-chroma) var(--mood-rage-hue));
+  /* If your theme aliases a second accent (e.g. --accent-2 := --accent-hover) at
+     :root on <html>, that alias already resolved to your engine color there, and
+     overriding --accent-hover on body can't reach it → send buttons / focus rings
+     leak the old color. Set the alias explicitly on body to override it. */
+  --accent-2:      oklch(0.55 var(--mood-rage-chroma) var(--mood-rage-hue));
+  --accent-wash:   oklch(0.62 var(--mood-rage-chroma) var(--mood-rage-hue) / 0.16);
+  --accent-line:   oklch(0.62 var(--mood-rage-chroma) var(--mood-rage-hue) / 0.4);
+  --accent-grad:   linear-gradient(135deg, oklch(0.6 0.21 calc(var(--mood-rage-hue) + 8)), oklch(0.5 0.22 calc(var(--mood-rage-hue) - 8)));
+  --danger:        oklch(0.63 0.22 22);
+  --focus:         oklch(0.62 0.15 var(--mood-rage-hue));
+
+  --bg:            oklch(0.11 0.045 var(--mood-rage-hue));
+  --aurora:
+    radial-gradient(58% 46% at 16% 6%,  oklch(0.42 0.2 calc(var(--mood-rage-hue) + 4) / 0.5), transparent 66%),
+    radial-gradient(50% 44% at 90% 14%, oklch(0.34 0.18 calc(var(--mood-rage-hue) - 10) / 0.45), transparent 64%),
+    radial-gradient(74% 62% at 54% 112%, oklch(0.3 0.19 calc(var(--mood-rage-hue) - 2) / 0.55), transparent 70%);
+
+  /* AI reading panel */
+  --chat-panel-bg:     oklch(0.17 0.06 var(--mood-rage-hue) / 0.44);
+  --panel-solid:       oklch(0.17 0.05 var(--mood-rage-hue));
+  --chat-panel-border: oklch(0.5 0.18 var(--mood-rage-hue) / 0.38);
+  --home-card:         oklch(0.5 0.16 var(--mood-rage-hue) / 0.24);
+
+  /* User's own bubble — carried away with rage, decoupled from any personalized color */
+  --chat-me-bg:     oklch(0.5 0.19 var(--mood-rage-hue) / 0.42);
+  --chat-me-solid:  oklch(0.5 0.19 var(--mood-rage-hue));
+  --chat-me-border: oklch(0.62 0.2 var(--mood-rage-hue) / 0.55);
+  --chat-me-text:   oklch(0.97 0.02 var(--mood-rage-hue));
+
+  --chat-scrim:
+    linear-gradient(180deg,
+      oklch(0.1 0.06 var(--mood-rage-hue) / 0.6),
+      oklch(0.08 0.05 var(--mood-rage-hue) / 0.3) 26%,
+      oklch(0.07 0.05 var(--mood-rage-hue) / 0.55));
+  --chat-scrim-top:    oklch(0.1 0.06 var(--mood-rage-hue) / 0.6);
+  --chat-scrim-bottom: oklch(0.07 0.05 var(--mood-rage-hue) / 0.92);
+
+  /* —— Neutral tokens for a dark world: the skin is dark regardless of the user's
+     light/dark preference — always bright text, dark surfaces, dark edges —— */
+  --text-strong: oklch(0.97 0.015 var(--mood-rage-hue));
+  --text:        oklch(0.92 0.02 var(--mood-rage-hue));
+  --text-mute:   oklch(0.78 0.03 var(--mood-rage-hue));
+  --text-dim:    oklch(0.64 0.03 var(--mood-rage-hue));
+  --text-faint:  oklch(0.5 0.03 var(--mood-rage-hue));
+  --surface:     oklch(0.16 0.04 var(--mood-rage-hue));
+  --surface-2:   oklch(0.19 0.045 var(--mood-rage-hue));
+  --surface-3:   oklch(0.23 0.05 var(--mood-rage-hue));
+  --border:       oklch(0.45 0.09 var(--mood-rage-hue) / 0.5);
+  --border-soft:  oklch(0.45 0.09 var(--mood-rage-hue) / 0.32);
+  --border-faint: oklch(0.45 0.09 var(--mood-rage-hue) / 0.18);
+  --scrim:        oklch(0.05 0.03 var(--mood-rage-hue) / 0.6);
+  --glass-surface: oklch(0.16 0.04 var(--mood-rage-hue) / 0.55);
+  --glow-border:  oklch(0.62 var(--mood-rage-chroma) var(--mood-rage-hue) / 0.38);
+  --glow-shadow:  0 0 12px oklch(0.62 var(--mood-rage-chroma) var(--mood-rage-hue) / 0.3);
+}
+
+/* —— Full takeover: an opaque red/black machine paints straight over the wallpaper.
+   Invasion = total occupation, not "erode / bleed through" — a translucent veil gets
+   washed out by the wallpaper's own color. ::before = the red world (this rule),
+   ::after = the noise layer on top. The knob --mood-rage-scrim-depth reads as
+   "shadow depth" (the strength of the top/bottom black vignette). —— */
+body[data-mood="rage"] .chat-wallpaper::before {
+  content: "";
+  position: absolute;
+  inset: -8px;               /* glitch offset is ±3px — don't expose an edge */
+  pointer-events: none;
+  background:
+    linear-gradient(180deg,
+      oklch(0 0 0 / calc(var(--mood-rage-scrim-depth) * 0.5)),
+      transparent 30%,
+      oklch(0 0 0 / var(--mood-rage-scrim-depth))),
+    radial-gradient(120% 90% at 20% 0%, oklch(0.3 0.13 calc(var(--mood-rage-hue) + 4)), transparent 60%),
+    radial-gradient(130% 100% at 85% 100%, oklch(0.22 0.11 calc(var(--mood-rage-hue) - 6)), transparent 65%),
+    linear-gradient(180deg, oklch(0.15 0.07 var(--mood-rage-hue)), oklch(0.1 0.06 calc(var(--mood-rage-hue) - 4)));
+  animation: mood-wall-glitch var(--mood-rage-wall-period) steps(1, end) infinite;
+}
+@keyframes mood-wall-glitch {
+  0%, 82%, 100% { transform: translate(0, 0); }
+  84% { transform: translate(-2px, 1px); }
+  86% { transform: translate(3px, -1px); }
+  88% { transform: translate(-1px, 0); }
+}
+
+/* —— Static noise (shared rage + rage2) ——
+   A grayscale SVG feTurbulence data-URI (self-contained, no external fetch). The noise
+   lives on ::after (top layer), over the opaque red world on ::before; the whole
+   wallpaper sits behind the messages, so the grain covers the background but never the
+   text. Strength = --mood-rage-noise.
+   Jitter uses transform translate (compositor-friendly, no per-frame repaint; the layer
+   is inflated 64px so the translate never exposes an edge).
+   rage uses screen (dark ground → bright specks); rage2 uses multiply (bright ground → dark specks). */
+body[data-mood="rage"]  .chat-wallpaper::after,
+body[data-mood="rage2"] .chat-wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: -64px;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 140px 140px;
+  opacity: calc(0.2 + 0.55 * var(--mood-rage-noise, 0.5));
+  animation: mood-noise 0.5s steps(3, end) infinite;
+}
+body[data-mood="rage"]  .chat-wallpaper::after { mix-blend-mode: screen; }
+body[data-mood="rage2"] .chat-wallpaper::after { mix-blend-mode: multiply; }
+@keyframes mood-noise {
+  0%   { transform: translate(0, 0); }
+  33%  { transform: translate(-47px, 31px); }
+  66%  { transform: translate(33px, -41px); }
+  100% { transform: translate(-19px, -12px); }
+}
+
+/* —— Persistent scanlines over the AI text area (::after; ::before is assumed taken by
+   your frosted panel layer) —— */
+body[data-mood="rage"] .msg--assistant .assistant-msg::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  left: -24px;
+  right: -24px;
+  z-index: 2;                 /* above the text (z:1), very low alpha, doesn't cost readability */
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 2px,
+    oklch(0.6 0.16 var(--mood-rage-hue) / calc(0.05 * var(--mood-rage-scanline))) 2px 3px);
+  mix-blend-mode: screen;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, oklch(0 0 0) 6%, oklch(0 0 0) 94%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, oklch(0 0 0) 6%, oklch(0 0 0) 94%, transparent 100%);
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+}
+
+/* —— Occasional "bad signal" jitter on the blur mask (::before is your feathered blur
+   panel; transform-only, shared with rage2) —— */
+body[data-mood="rage"] .msg--assistant .assistant-msg::before,
+body[data-mood="rage2"] .msg--assistant .assistant-msg::before {
+  animation: mood-signal var(--mood-rage-signal-period) steps(1, end) infinite;
+}
+@keyframes mood-signal {
+  0%, 90%, 100% { transform: translate(0, 0); }
+  91% { transform: translate(-3px, 0); }
+  93% { transform: translate(2px, 0); }
+  95% { transform: translate(-1px, 1px); }
+}
+
+/* —— Big glitch: the whole text area gets RGB split + a one-frame offset (mood.js
+   adds/removes the class on body) —— */
+body.mood-glitch-flash .msg--assistant .assistant-msg {
+  text-shadow: 2.5px 0 oklch(0.62 0.22 22 / 0.9), -2.5px 0 oklch(0.72 0.16 200 / 0.9);
+  transform: translateX(1.5px);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   DESIRE — the air thickens. Deep wine tone + lights down + breathing glow,
+   no jitter or noise.
+   ════════════════════════════════════════════════════════════════════════ */
+
+body[data-mood="desire"] {
+  --accent:        oklch(0.58 var(--mood-desire-chroma) var(--mood-desire-hue));
+  --accent-hover:  oklch(0.64 var(--mood-desire-chroma) var(--mood-desire-hue));
+  --accent-press:  oklch(0.5 var(--mood-desire-chroma) var(--mood-desire-hue));
+  /* Same as rage: set --accent-2 explicitly (a :root alias can't be chased back from body's --accent-hover), plum */
+  --accent-2:      oklch(0.5 var(--mood-desire-chroma) var(--mood-desire-hue));
+  --accent-wash:   oklch(0.58 var(--mood-desire-chroma) var(--mood-desire-hue) / 0.15);
+  --accent-line:   oklch(0.58 var(--mood-desire-chroma) var(--mood-desire-hue) / 0.36);
+  --accent-grad:   linear-gradient(135deg, oklch(0.56 0.16 calc(var(--mood-desire-hue) + 8)), oklch(0.44 0.15 calc(var(--mood-desire-hue) - 8)));
+  --danger:        oklch(0.6 0.19 18);
+  --focus:         oklch(0.58 0.13 var(--mood-desire-hue));
+
+  --bg:            oklch(0.12 0.05 var(--mood-desire-hue));
+  --aurora:
+    radial-gradient(60% 48% at 18% 8%,  oklch(0.36 0.14 calc(var(--mood-desire-hue) + 6) / 0.42), transparent 68%),
+    radial-gradient(52% 46% at 88% 16%, oklch(0.3 0.13 calc(var(--mood-desire-hue) - 8) / 0.4), transparent 66%),
+    radial-gradient(76% 64% at 52% 114%, oklch(0.26 0.14 calc(var(--mood-desire-hue) - 2) / 0.5), transparent 72%);
+
+  /* Lights down: scrim deeper and heavier */
+  --chat-panel-bg:     oklch(0.18 0.06 var(--mood-desire-hue) / 0.62);
+  --panel-solid:       oklch(0.17 0.05 var(--mood-desire-hue));
+  --chat-panel-border: oklch(0.45 0.14 var(--mood-desire-hue) / 0.34);
+  --home-card:         oklch(0.46 0.14 var(--mood-desire-hue) / 0.26);
+
+  --chat-me-bg:     oklch(0.48 0.15 var(--mood-desire-hue) / 0.48);
+  --chat-me-solid:  oklch(0.48 0.15 var(--mood-desire-hue));
+  --chat-me-border: oklch(0.58 0.16 var(--mood-desire-hue) / 0.5);
+  --chat-me-text:   oklch(0.97 0.02 var(--mood-desire-hue));
+
+  --chat-scrim:
+    linear-gradient(180deg,
+      oklch(0.12 0.06 var(--mood-desire-hue) / var(--mood-desire-scrim-depth)),
+      oklch(0.08 0.05 var(--mood-desire-hue) / calc(var(--mood-desire-scrim-depth) - 0.12)) 30%,
+      oklch(0.07 0.05 var(--mood-desire-hue) / var(--mood-desire-scrim-depth)));
+  --chat-scrim-top:    oklch(0.12 0.06 var(--mood-desire-hue) / 0.62);
+  --chat-scrim-bottom: oklch(0.07 0.05 var(--mood-desire-hue) / 0.94);
+
+  /* —— Neutral tokens for a dark world: same as rage, bright text / dark surfaces / dark
+     edges (values a touch softer — a room with the lights turned down) —— */
+  --text-strong: oklch(0.96 0.015 var(--mood-desire-hue));
+  --text:        oklch(0.9 0.02 var(--mood-desire-hue));
+  --text-mute:   oklch(0.76 0.03 var(--mood-desire-hue));
+  --text-dim:    oklch(0.62 0.03 var(--mood-desire-hue));
+  --text-faint:  oklch(0.48 0.03 var(--mood-desire-hue));
+  --surface:     oklch(0.16 0.04 var(--mood-desire-hue));
+  --surface-2:   oklch(0.19 0.045 var(--mood-desire-hue));
+  --surface-3:   oklch(0.22 0.05 var(--mood-desire-hue));
+  --border:       oklch(0.44 0.08 var(--mood-desire-hue) / 0.44);
+  --border-soft:  oklch(0.44 0.08 var(--mood-desire-hue) / 0.28);
+  --border-faint: oklch(0.44 0.08 var(--mood-desire-hue) / 0.16);
+  --scrim:        oklch(0.05 0.03 var(--mood-desire-hue) / 0.66);
+  --glass-surface: oklch(0.16 0.04 var(--mood-desire-hue) / 0.6);
+  --glow-border:  oklch(0.58 var(--mood-desire-chroma) var(--mood-desire-hue) / 0.34);
+  --glow-shadow:  0 0 12px oklch(0.58 var(--mood-desire-chroma) var(--mood-desire-hue) / 0.28);
+}
+
+/* —— Wallpaper dimmed hard + warm red shift (no erode, no jitter) —— */
+body[data-mood="desire"] .chat-wallpaper {
+  filter: brightness(var(--mood-desire-wall-dim)) saturate(1.2) sepia(0.16) hue-rotate(-12deg) contrast(1.04);
+}
+body[data-mood="desire"] .chat-wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    oklch(0.14 0.08 var(--mood-desire-hue) / 0.55),
+    oklch(0.08 0.06 var(--mood-desire-hue) / var(--mood-desire-scrim-depth)));
+}
+
+/* —— AI text: 3-4s breathing glow + slightly looser tracking; no jitter at all —— */
+body[data-mood="desire"] .msg--assistant .assistant-msg {
+  letter-spacing: 0.012em;
+  text-shadow: 0 0 8px oklch(0.62 0.14 var(--mood-desire-hue) / 0.2);
+}
+/* The breath runs only on the newest message — same reason as moonlight (a text-shadow
+   animation can't composite → animating every message = the whole page repainting
+   continuously = heat). Old messages keep a static glow; focusing the breath on "the line
+   being said right now" actually reads more alive. */
+body[data-mood="desire"] .msg--assistant:nth-last-child(1 of .msg--assistant) .assistant-msg {
+  animation: mood-breath var(--mood-desire-breath) ease-in-out infinite;
+}
+@keyframes mood-breath {
+  0%, 100% { text-shadow: 0 0 0 transparent; }
+  50% { text-shadow: 0 0 10px oklch(0.62 0.14 var(--mood-desire-hue) / 0.38); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   RAGE2 — red ground, black text (the whole scheme inverted from rage's dark
+   ground / bright text). Full-screen opaque alarm-red takeover + near-black text.
+   Noise / corruption / big-glitch timing reuses rage's --mood-rage-*.
+   ════════════════════════════════════════════════════════════════════════ */
+body[data-mood="rage2"] {
+  --accent:        oklch(0.44 0.2 var(--mood-rage2-hue));
+  --accent-hover:  oklch(0.5 0.2 var(--mood-rage2-hue));
+  --accent-press:  oklch(0.38 0.19 var(--mood-rage2-hue));
+  --accent-2:      oklch(0.42 0.2 var(--mood-rage2-hue));   /* send button (hard-coded white text) — darken for legibility */
+  --accent-on:     oklch(0.98 0.02 var(--mood-rage2-hue));  /* text on an accent ground = near white */
+  --accent-wash:   oklch(0.44 0.2 var(--mood-rage2-hue) / 0.16);
+  --accent-line:   oklch(0.42 0.2 var(--mood-rage2-hue) / 0.42);
+  --accent-grad:   linear-gradient(135deg, oklch(0.47 0.2 calc(var(--mood-rage2-hue) + 4)), oklch(0.37 0.19 calc(var(--mood-rage2-hue) - 4)));
+  --danger:        oklch(0.4 0.2 20);
+  --focus:         oklch(0.44 0.16 var(--mood-rage2-hue));
+
+  --bg:            oklch(0.55 var(--mood-rage2-chroma) var(--mood-rage2-hue));
+  --aurora:
+    radial-gradient(58% 46% at 16% 6%,  oklch(0.68 0.2 calc(var(--mood-rage2-hue) + 5) / 0.55), transparent 66%),
+    radial-gradient(50% 44% at 90% 14%, oklch(0.46 0.21 calc(var(--mood-rage2-hue) - 6) / 0.5), transparent 64%),
+    radial-gradient(74% 62% at 54% 112%, oklch(0.4 0.2 calc(var(--mood-rage2-hue) - 1) / 0.6), transparent 70%);
+
+  /* AI reading panel — light red ground, near-black text reads clean */
+  --chat-panel-bg:     oklch(0.72 0.12 var(--mood-rage2-hue) / 0.5);
+  --panel-solid:       oklch(0.7 0.12 var(--mood-rage2-hue));
+  --chat-panel-border: oklch(0.44 0.18 var(--mood-rage2-hue) / 0.4);
+  --home-card:         oklch(0.72 0.12 var(--mood-rage2-hue) / 0.4);
+
+  /* User's own bubble — likewise light ground, dark text */
+  --chat-me-bg:     oklch(0.66 0.15 var(--mood-rage2-hue) / 0.5);
+  --chat-me-solid:  oklch(0.66 0.15 var(--mood-rage2-hue));
+  --chat-me-border: oklch(0.46 0.19 var(--mood-rage2-hue) / 0.6);
+  --chat-me-text:   oklch(0.18 0.05 var(--mood-rage2-hue));
+
+  --chat-scrim:
+    linear-gradient(180deg,
+      oklch(0.64 0.16 var(--mood-rage2-hue) / var(--mood-rage2-scrim-depth)),
+      oklch(0.58 0.18 var(--mood-rage2-hue) / calc(var(--mood-rage2-scrim-depth) - 0.1)) 30%,
+      oklch(0.5 0.19 var(--mood-rage2-hue) / var(--mood-rage2-scrim-depth)));
+  --chat-scrim-top:    oklch(0.66 0.15 var(--mood-rage2-hue) / 0.5);
+  --chat-scrim-bottom: oklch(0.5 0.19 var(--mood-rage2-hue) / 0.6);
+
+  /* —— Neutral tokens for a bright world: red ground, black text — the inverse of rage
+     (bright text → dark text, dark surfaces → bright surfaces) —— */
+  --text-strong: oklch(0.16 0.05 var(--mood-rage2-hue));
+  --text:        oklch(0.2 0.05 var(--mood-rage2-hue));
+  --text-mute:   oklch(0.3 0.06 var(--mood-rage2-hue));
+  --text-dim:    oklch(0.38 0.07 var(--mood-rage2-hue));
+  --text-faint:  oklch(0.46 0.08 var(--mood-rage2-hue));
+  --surface:     oklch(0.63 0.14 var(--mood-rage2-hue));
+  --surface-2:   oklch(0.67 0.13 var(--mood-rage2-hue));
+  --surface-3:   oklch(0.71 0.12 var(--mood-rage2-hue));
+  --border:       oklch(0.4 0.14 var(--mood-rage2-hue) / 0.5);
+  --border-soft:  oklch(0.4 0.14 var(--mood-rage2-hue) / 0.32);
+  --border-faint: oklch(0.4 0.14 var(--mood-rage2-hue) / 0.18);
+  --scrim:        oklch(0.3 0.14 var(--mood-rage2-hue) / 0.5);
+  --glass-surface: oklch(0.66 0.13 var(--mood-rage2-hue) / 0.55);
+  --glow-border:  oklch(0.44 0.2 var(--mood-rage2-hue) / 0.42);
+  --glow-shadow:  0 0 12px oklch(0.4 0.2 var(--mood-rage2-hue) / 0.3);
+}
+
+/* —— Full takeover: opaque alarm red paints over the wallpaper (a translucent screen
+   veil would get washed to low-saturation red by the wallpaper — this stays dead red).
+   ::before = red world, ::after = noise on top. —— */
+body[data-mood="rage2"] .chat-wallpaper::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg,
+      oklch(0 0 0 / calc(var(--mood-rage2-scrim-depth) * 0.55)),
+      transparent 32%,
+      oklch(0 0 0 / calc(var(--mood-rage2-scrim-depth) * 0.85))),
+    radial-gradient(120% 90% at 18% 0%, oklch(0.62 0.21 calc(var(--mood-rage2-hue) + 4)), transparent 62%),
+    radial-gradient(130% 100% at 85% 100%, oklch(0.47 0.2 calc(var(--mood-rage2-hue) - 5)), transparent 66%),
+    linear-gradient(180deg, oklch(0.57 0.19 var(--mood-rage2-hue)), oklch(0.5 0.2 calc(var(--mood-rage2-hue) - 4)));
+  animation: mood-wall-glitch var(--mood-rage-wall-period) steps(1, end) infinite;
+}
+
+/* —— Scanlines: red ground / black text uses "dark line multiply" (inverse of rage's
+   bright-line screen), sharing the same switch —— */
+body[data-mood="rage2"] .msg--assistant .assistant-msg::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  left: -24px;
+  right: -24px;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 2px,
+    oklch(0.28 0.12 var(--mood-rage2-hue) / calc(0.07 * var(--mood-rage-scanline))) 2px 3px);
+  mix-blend-mode: multiply;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, oklch(0 0 0) 6%, oklch(0 0 0) 94%, transparent 100%);
+          mask-image: linear-gradient(to bottom, transparent 0, oklch(0 0 0) 6%, oklch(0 0 0) 94%, transparent 100%);
+  -webkit-mask-repeat: no-repeat;
+          mask-repeat: no-repeat;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   VUOTO — the void. A world with the color drained out: all chroma 0 black/white/gray,
+   text a half-step darker ("talking through frosted glass"), zero motion. The stillness
+   is carried by color + freezing even the ambient drift (scoped to vuoto; restored on exit).
+   ════════════════════════════════════════════════════════════════════════ */
+/* World frozen: even the aurora drift stops — both a design choice (rage=corrupt /
+   desire=thicken / vuoto=stillness) and, incidentally, the lowest-power mode. */
+body[data-mood="vuoto"] .chat-aurora { animation: none; }
+body[data-mood="vuoto"] {
+  --accent:        oklch(0.62 0 0);
+  --accent-hover:  oklch(0.68 0 0);
+  --accent-press:  oklch(0.54 0 0);
+  /* Same as rage: set --accent-2 explicitly (a :root alias resolved to your engine color on <html>) */
+  --accent-2:      oklch(0.54 0 0);
+  --accent-on:     oklch(0.14 0 0);    /* near-black text on the gray accent ground */
+  --accent-wash:   oklch(0.62 0 0 / 0.14);
+  --accent-line:   oklch(0.62 0 0 / 0.38);
+  --accent-grad:   linear-gradient(135deg, oklch(0.6 0 0), oklch(0.46 0 0));
+  --danger:        oklch(0.6 0 0);
+  --focus:         oklch(0.6 0 0);
+
+  --bg:            oklch(0.13 0 0);
+  /* aurora becomes a near-hueless faint gray haze (the global drift is still there, but so
+     gray you can't tell it's moving) */
+  --aurora:
+    radial-gradient(58% 46% at 16% 6%,  oklch(0.3 0 0 / 0.4), transparent 66%),
+    radial-gradient(50% 44% at 90% 14%, oklch(0.24 0 0 / 0.34), transparent 64%),
+    radial-gradient(74% 62% at 54% 112%, oklch(0.2 0 0 / 0.44), transparent 70%);
+
+  --chat-panel-bg:     oklch(0.2 0 0 / 0.46);
+  --panel-solid:       oklch(0.2 0 0);
+  --chat-panel-border: oklch(0.44 0 0 / 0.32);
+  --home-card:         oklch(0.4 0 0 / 0.22);
+
+  --chat-me-bg:     oklch(0.4 0 0 / 0.42);
+  --chat-me-solid:  oklch(0.4 0 0);
+  --chat-me-border: oklch(0.55 0 0 / 0.5);
+  --chat-me-text:   oklch(0.9 0 0);
+
+  --chat-scrim:
+    linear-gradient(180deg,
+      oklch(0.11 0 0 / 0.6),
+      oklch(0.09 0 0 / 0.3) 26%,
+      oklch(0.08 0 0 / 0.55));
+  --chat-scrim-top:    oklch(0.11 0 0 / 0.6);
+  --chat-scrim-bottom: oklch(0.08 0 0 / 0.9);
+
+  /* —— Neutral tokens: all gray, text a half-step darker than the other skins (talking through frosted glass) —— */
+  --text-strong: oklch(0.9 0 0);
+  --text:        oklch(0.82 0 0);
+  --text-mute:   oklch(0.68 0 0);
+  --text-dim:    oklch(0.55 0 0);
+  --text-faint:  oklch(0.42 0 0);
+  --surface:     oklch(0.17 0 0);
+  --surface-2:   oklch(0.2 0 0);
+  --surface-3:   oklch(0.24 0 0);
+  --border:       oklch(0.44 0 0 / 0.5);
+  --border-soft:  oklch(0.44 0 0 / 0.32);
+  --border-faint: oklch(0.44 0 0 / 0.18);
+  --scrim:        oklch(0.05 0 0 / 0.6);
+  --glass-surface: oklch(0.17 0 0 / 0.55);
+  --glow-border:  oklch(0.6 0 0 / 0.32);
+  --glow-shadow:  0 0 12px oklch(0.6 0 0 / 0.24);
+}
+
+/* —— Wallpaper: grayscale + dim + low contrast, then a thin gray veil; zero motion —— */
+body[data-mood="vuoto"] .chat-wallpaper {
+  filter: grayscale(1) brightness(var(--mood-vuoto-wall-dim, 0.6)) contrast(0.92);
+}
+body[data-mood="vuoto"] .chat-wallpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(oklch(0.14 0 0 / 0.42), oklch(0.1 0 0 / 0.56));
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   MOONLIGHT — night talk. Deep-blue night sky + moon-gold accent + deep-blue glass
+   bubbles + two-layer star field + occasional meteors + AI-text pale-gold glow (8s
+   very slow drift). A tender mode, no jitter or noise.
+   ════════════════════════════════════════════════════════════════════════ */
+body[data-mood="moonlight"] {
+  /* accent = moon gold (send button / focus turn gold); accent-on is dark */
+  --accent:        oklch(0.78 0.1 85);
+  --accent-hover:  oklch(0.83 0.1 85);
+  --accent-press:  oklch(0.72 0.1 85);
+  /* Same as rage: set --accent-2 explicitly to override the :root alias → send button turns gold */
+  --accent-2:      oklch(0.74 0.1 85);
+  --accent-on:     oklch(0.2 0.04 var(--mood-moon-hue));  /* text on the gold ground = deep blue near-black */
+  --accent-wash:   oklch(0.78 0.1 85 / 0.15);
+  --accent-line:   oklch(0.78 0.1 85 / 0.4);
+  --accent-grad:   linear-gradient(135deg, oklch(0.82 0.11 90), oklch(0.72 0.1 78));
+  --danger:        oklch(0.62 0.19 22);
+  --focus:         oklch(0.78 0.1 85);
+
+  --bg:            oklch(0.14 0.05 var(--mood-moon-hue));
+  --aurora:
+    radial-gradient(58% 46% at 16% 6%,  oklch(0.34 0.11 calc(var(--mood-moon-hue) + 8) / 0.5), transparent 66%),
+    radial-gradient(50% 44% at 90% 14%, oklch(0.28 0.1 calc(var(--mood-moon-hue) - 14) / 0.44), transparent 64%),
+    radial-gradient(74% 62% at 54% 112%, oklch(0.24 0.1 calc(var(--mood-moon-hue) + 2) / 0.5), transparent 70%);
+
+  /* AI reading panel */
+  --chat-panel-bg:     oklch(0.2 0.06 var(--mood-moon-hue) / 0.5);
+  --panel-solid:       oklch(0.19 0.05 var(--mood-moon-hue));
+  --chat-panel-border: oklch(0.5 0.1 var(--mood-moon-hue) / 0.34);
+  --home-card:         oklch(0.4 0.09 var(--mood-moon-hue) / 0.24);
+
+  /* User's own bubble — deep-blue glass (blue translucent + soft edge) */
+  --chat-me-bg:     oklch(0.4 0.09 var(--mood-moon-hue) / 0.46);
+  --chat-me-solid:  oklch(0.4 0.09 var(--mood-moon-hue));
+  --chat-me-border: oklch(0.56 0.11 var(--mood-moon-hue) / 0.5);
+  --chat-me-text:   oklch(0.95 0.02 var(--mood-moon-hue));
+
+  /* Moonlight's scrim is deliberately lighter than the others: the night sky must stay
+     see-through so the stars read (text legibility is backed by your panel blur layer) */
+  --chat-scrim:
+    linear-gradient(180deg,
+      oklch(0.13 0.06 var(--mood-moon-hue) / 0.42),
+      oklch(0.1 0.05 var(--mood-moon-hue) / 0.16) 26%,
+      oklch(0.09 0.05 var(--mood-moon-hue) / 0.38));
+  --chat-scrim-top:    oklch(0.13 0.06 var(--mood-moon-hue) / 0.42);
+  --chat-scrim-bottom: oklch(0.09 0.05 var(--mood-moon-hue) / 0.75);
+
+  /* —— Neutral tokens for a dark world: blue-tinted bright text / dark surfaces / dark edges —— */
+  --text-strong: oklch(0.97 0.015 var(--mood-moon-hue));
+  --text:        oklch(0.92 0.02 var(--mood-moon-hue));
+  --text-mute:   oklch(0.78 0.03 var(--mood-moon-hue));
+  --text-dim:    oklch(0.64 0.03 var(--mood-moon-hue));
+  --text-faint:  oklch(0.5 0.03 var(--mood-moon-hue));
+  --surface:     oklch(0.17 0.04 var(--mood-moon-hue));
+  --surface-2:   oklch(0.2 0.045 var(--mood-moon-hue));
+  --surface-3:   oklch(0.24 0.05 var(--mood-moon-hue));
+  --border:       oklch(0.5 0.08 var(--mood-moon-hue) / 0.5);
+  --border-soft:  oklch(0.5 0.08 var(--mood-moon-hue) / 0.32);
+  --border-faint: oklch(0.5 0.08 var(--mood-moon-hue) / 0.18);
+  --scrim:        oklch(0.06 0.03 var(--mood-moon-hue) / 0.6);
+  --glass-surface: oklch(0.17 0.04 var(--mood-moon-hue) / 0.55);
+  --glow-border:  oklch(0.78 0.1 85 / 0.32);
+  --glow-shadow:  0 0 12px oklch(0.78 0.1 85 / 0.26);
+}
+
+/* —— Wallpaper dimmed toward blue: a static deep-blue scrim (::before). Do NOT switch this
+   back to filter — a filter ALSO applies to the pseudo-elements and children, and it once
+   pinned the stars/meteors to half brightness. —— */
+body[data-mood="moonlight"] .chat-wallpaper::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg,
+    oklch(0.1 0.05 var(--mood-moon-hue) / 0.52),
+    oklch(0.08 0.05 var(--mood-moon-hue) / 0.66));
+}
+
+/* —— Star field: the .mood-star-layer child injected by mood.js (outside the wallpaper's
+   filter/pseudo-element system, so full brightness). Three layers of stars (dense small
+   120px tile + sparse large 210px gold/white-mix tile + 300px hero-star bright-core gold-halo
+   tile). Twinkle is a single opacity animation (compositor-friendly; a filter:brightness
+   animation once layered on top of this was a whole-page per-frame repaint / heat source and
+   was removed on purpose — don't add it back). Starlight strength × var(--mood-moon-star). —— */
+body[data-mood="moonlight"] .mood-star-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: calc(1.4 * var(--mood-moon-star, 0.6));   /* reduced-motion (frozen) still honors the knob (>1 is clamped to 1 by the browser) */
+  background-image:
+    /* Small-star layer (120px tile): larger and more solid */
+    radial-gradient(1.7px 1.7px at 18px 30px,   oklch(0.98 0.02 var(--mood-moon-hue)), transparent 55%),
+    radial-gradient(1.4px 1.4px at 74px 12px,   oklch(0.96 0.02 var(--mood-moon-hue) / 0.95), transparent 55%),
+    radial-gradient(1.6px 1.6px at 100px 66px,  oklch(0.98 0.02 var(--mood-moon-hue)), transparent 55%),
+    radial-gradient(1.4px 1.4px at 44px 92px,   oklch(0.95 0.02 var(--mood-moon-hue) / 0.9), transparent 55%),
+    radial-gradient(1.7px 1.7px at 8px 108px,   oklch(0.98 0.02 var(--mood-moon-hue)), transparent 55%),
+    /* Large-star layer (210px tile): gold/white mix, gold stars pop on the blue ground */
+    radial-gradient(2.6px 2.6px at 40px 60px,   oklch(0.99 0.03 90), transparent 50%),
+    radial-gradient(2.3px 2.3px at 165px 28px,  oklch(0.97 0.02 var(--mood-moon-hue)), transparent 50%),
+    radial-gradient(2.7px 2.7px at 112px 172px, oklch(0.99 0.04 88), transparent 50%),
+    /* Hero-star layer (300px tile, sparse): bright core + gold halo, two-stop */
+    radial-gradient(3.6px 3.6px at 66px 120px,  oklch(1 0 0), oklch(0.92 0.07 88 / 0.55) 45%, transparent 72%),
+    radial-gradient(3.2px 3.2px at 228px 236px, oklch(1 0 0), oklch(0.9 0.06 var(--mood-moon-hue) / 0.5) 45%, transparent 72%);
+  background-repeat: repeat;
+  background-size:
+    120px 120px, 120px 120px, 120px 120px, 120px 120px, 120px 120px,
+    210px 210px, 210px 210px, 210px 210px,
+    300px 300px, 300px 300px;
+  animation: mood-moon-twinkle-a 3.7s ease-in-out infinite;
+}
+@keyframes mood-moon-twinkle-a {
+  0%, 100% { opacity: calc(1.4 * var(--mood-moon-star, 0.6)); }
+  50%      { opacity: calc(2.2 * var(--mood-moon-star, 0.6)); }
+}
+
+/* —— Meteors: three .mood-meteor children injected by mood.js (a staggered little meteor
+   shower) —— m1/m2 share a 30s period offset by 0.9s → each round they streak across in a
+   pair (different angle / height / length); m3 has a 43s period + a negative delay to drift
+   out of phase → now and then it makes a triple. The angle rides in via --mtr-angle inside
+   the keyframes (the keyframe transform fully overrides the element transform, so you can't
+   rotate the element itself). Peak brightness = --mtr-peak × the switch var(--mood-moon-meteor)
+   (1/0). reduced-motion off (animation:none → base opacity 0). —— */
+body[data-mood="moonlight"] .mood-meteor {
+  position: absolute;
+  left: -20%;
+  width: 58%;
+  height: 2.5px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, oklch(0.96 0.05 90 / 0.95) 55%, oklch(1 0 0) 82%, transparent);
+  border-radius: 3px;
+  box-shadow: 0 0 7px oklch(0.94 0.07 88 / 0.7);
+  opacity: 0;
+  transform: rotate(var(--mtr-angle, 30deg)) translateX(-60vw);
+}
+body[data-mood="moonlight"] .mood-meteor--1 {
+  top: 6%;
+  animation: mood-moon-meteor 30s linear infinite;
+}
+body[data-mood="moonlight"] .mood-meteor--2 {
+  top: 15%;
+  width: 44%;
+  height: 2px;
+  --mtr-angle: 34deg;
+  animation: mood-moon-meteor 30s linear 0.9s infinite;
+}
+body[data-mood="moonlight"] .mood-meteor--3 {
+  top: 24%;
+  width: 34%;
+  height: 1.8px;
+  --mtr-angle: 26deg;
+  --mtr-peak: 0.7;
+  box-shadow: 0 0 5px oklch(0.94 0.07 88 / 0.55);
+  animation: mood-moon-meteor 43s linear -17s infinite;
+}
+@keyframes mood-moon-meteor {
+  0%    { transform: rotate(var(--mtr-angle, 30deg)) translateX(-60vw); opacity: 0; }
+  0.5%  { opacity: calc(var(--mtr-peak, 1) * var(--mood-moon-meteor, 1)); }
+  5%    { transform: rotate(var(--mtr-angle, 30deg)) translateX(95vw); opacity: 0; }
+  100%  { transform: rotate(var(--mtr-angle, 30deg)) translateX(95vw); opacity: 0; }
+}
+
+/* —— AI-text pale-gold glow: a static base glow (kept under reduced-motion) + an 8s very slow
+   intensity drift (amplitude so small you don't see it move, only sense it's alive — distinct
+   from desire's 3.4s breath); strength × var(--mood-moon-gold) —— */
+body[data-mood="moonlight"] .msg--assistant .assistant-msg {
+  text-shadow: 0 0 7px oklch(0.86 0.1 88 / calc(0.2 * var(--mood-moon-gold, 0.5)));
+}
+/* The drift runs only on the newest message: a text-shadow animation can't composite, so
+   running it on every message = continuous whole-page repaint (the summer-phone-gets-hot
+   kind). Old messages keep the static glow above.
+   :nth-last-child(of) needs a modern engine; where unsupported this one rule silently fails
+   and it degrades to an all-static glow — harmless. */
+body[data-mood="moonlight"] .msg--assistant:nth-last-child(1 of .msg--assistant) .assistant-msg {
+  animation: mood-moon-glow 8s ease-in-out infinite;
+}
+@keyframes mood-moon-glow {
+  0%, 100% { text-shadow: 0 0 6px oklch(0.86 0.1 88 / calc(0.14 * var(--mood-moon-gold, 0.5))); }
+  50%      { text-shadow: 0 0 11px oklch(0.86 0.1 88 / calc(0.3 * var(--mood-moon-gold, 0.5))); }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   INVASION FLASH overlay — injected by mood.js as <div class="mood-invade"> when
+   entering rage / rage2 with opts.flash. Horizontal slice offset + red/cyan chromatic
+   split + white flash ~300ms; the whole thing fades out over ~1s, revealing the already-
+   swapped red/black skin.
+   ════════════════════════════════════════════════════════════════════════ */
+.mood-invade {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  overflow: hidden;
+  animation: mood-invade-out 1s ease-out forwards;
+}
+.mood-invade__flash {
+  position: absolute;
+  inset: 0;
+  background: oklch(0.99 0.02 22);
+  animation: mood-invade-flash 0.32s steps(2, end) 1;
+  opacity: 0;
+}
+.mood-invade__slice {
+  position: absolute;
+  left: -6%;
+  width: 112%;
+  height: 22%;
+  background:
+    linear-gradient(90deg, oklch(0.62 0.24 22 / 0.55), transparent 40%),
+    linear-gradient(270deg, oklch(0.7 0.16 200 / 0.5), transparent 40%);
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+.mood-invade__slice:nth-child(1) { top: 12%; animation: mood-invade-slice-a 0.3s steps(3, end) 1; }
+.mood-invade__slice:nth-child(2) { top: 44%; animation: mood-invade-slice-b 0.3s steps(3, end) 1; }
+.mood-invade__slice:nth-child(3) { top: 71%; animation: mood-invade-slice-a 0.28s steps(3, end) 0.04s 1; }
+
+@keyframes mood-invade-flash {
+  0% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+@keyframes mood-invade-slice-a {
+  0% { transform: translateX(0); opacity: 0; }
+  20% { transform: translateX(-9%); opacity: 0.9; }
+  55% { transform: translateX(7%); opacity: 0.8; }
+  100% { transform: translateX(0); opacity: 0; }
+}
+@keyframes mood-invade-slice-b {
+  0% { transform: translateX(0); opacity: 0; }
+  25% { transform: translateX(11%); opacity: 0.85; }
+  60% { transform: translateX(-6%); opacity: 0.75; }
+  100% { transform: translateX(0); opacity: 0; }
+}
+@keyframes mood-invade-out {
+  0% { opacity: 1; }
+  55% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Reduced motion: all animation off, only color remains. mood.js also skips the
+   invasion flash / glitch trio under prefers-reduced-motion, so here we only need to
+   silence the persistent CSS animations.
+   ════════════════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  body[data-mood="rage"] .chat-wallpaper::after,
+  body[data-mood="rage"] .chat-wallpaper::before,
+  body[data-mood="rage"] .msg--assistant .assistant-msg::before,
+  body[data-mood="rage2"] .chat-wallpaper::after,
+  body[data-mood="rage2"] .chat-wallpaper::before,
+  body[data-mood="rage2"] .msg--assistant .assistant-msg::before,
+  body[data-mood="desire"] .msg--assistant .assistant-msg,
+  body[data-mood="moonlight"] .mood-star-layer,
+  body[data-mood="moonlight"] .mood-meteor,
+  body[data-mood="moonlight"] .msg--assistant .assistant-msg,
+  .mood-invade,
+  .mood-invade__flash,
+  .mood-invade__slice { animation: none; }
+  .mood-invade { display: none; }
+  /* The newest-message drift / breath (the :nth-last-child(of) selector) is on its own line:
+     folding it into the list above would take the whole rule down on engines that don't
+     support the (of) syntax. */
+  body[data-mood="moonlight"] .msg--assistant:nth-last-child(1 of .msg--assistant) .assistant-msg { animation: none; }
+  body[data-mood="desire"] .msg--assistant:nth-last-child(1 of .msg--assistant) .assistant-msg { animation: none; }
+}

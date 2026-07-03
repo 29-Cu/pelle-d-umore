@@ -1,0 +1,112 @@
+/* Pelle d'Umore — Emotional Skin for AI Chat | CC BY 4.0 — Attribution required | Created by Cu & Lunedì (cunedi.uk)
+ *
+ * fx.css — inline text effects.
+ *
+ * The AI body's [glow]/[big]/[huge]/[whisper]/[red]/[shake]/[blur]/[glitch]
+ * become <span class="fx-…"> (injected by fx.js).
+ *
+ * Only transform / opacity / filter / text-shadow are animated (compositor
+ * layers — no reflow). Colors read your theme tokens (--accent / --danger /
+ * --text-dim / --text …) so effects follow your skin; each has a neutral
+ * purple fallback so this file works standalone if you define no tokens.
+ * prefers-reduced-motion: all animation off, color/size stay (information is
+ * never carried by motion alone).
+ *
+ * --fx-glow-mult is a public CSS hook: set it on <body> (0.5–2.5) to scale the
+ * glow intensity live. It is a styling knob, not a settings UI.
+ */
+
+/* ── glow: soft accent halo. Three text-shadow layers (tight bright core + mid
+ *    halo + far bloom); both radius and alpha are multiplied by --fx-glow-mult
+ *    (default 1 = already clearly visible). Alpha uses relative color syntax
+ *    oklch(from …) and min() clamps it ≤ 1. ── */
+.fx-glow {
+  color: var(--accent, oklch(0.72 0.12 305));
+  text-shadow:
+    0 0 calc(3px * var(--fx-glow-mult, 1))  oklch(from var(--accent, oklch(0.72 0.12 305)) l c h / min(0.95, calc(0.55 * var(--fx-glow-mult, 1)))),
+    0 0 calc(9px * var(--fx-glow-mult, 1))  oklch(from var(--accent, oklch(0.72 0.12 305)) l c h / min(0.8,  calc(0.4  * var(--fx-glow-mult, 1)))),
+    0 0 calc(20px * var(--fx-glow-mult, 1)) oklch(from var(--accent, oklch(0.72 0.12 305)) l c h / min(0.6,  calc(0.25 * var(--fx-glow-mult, 1))));
+}
+
+/* ── big / huge: larger type ── */
+.fx-big  { font-size: 1.35em; font-weight: 700; }
+.fx-huge { font-size: 1.9em;  font-weight: 800; line-height: 1.12; }
+
+/* ── whisper: smaller + dim ── */
+.fx-whisper {
+  font-size: 0.82em;
+  color: var(--text-dim, oklch(0.62 0.02 305));
+  letter-spacing: 0.01em;
+}
+
+/* ── red: danger color ── */
+.fx-red { color: var(--danger, oklch(0.63 0.22 22)); font-weight: 600; }
+
+/* ── shake: jitter (transform only) ── */
+.fx-shake {
+  display: inline-block;
+  animation: fx-shake 0.42s cubic-bezier(.36, .07, .19, .97) infinite;
+}
+@keyframes fx-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-1.5px) rotate(-0.5deg); }
+  40% { transform: translateX(1.5px) rotate(0.5deg); }
+  60% { transform: translateX(-1px); }
+  80% { transform: translateX(1px); }
+}
+
+/* ── blur: blur mask, click to reveal (.fx-revealed is added by fx.js and stays) ── */
+.fx-blur {
+  filter: blur(5px);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: filter 0.35s ease;
+}
+.fx-blur.fx-revealed {
+  filter: none;
+  cursor: auto;
+}
+
+/* ── glitch: ::before/::after copy the text via data-text for red/cyan RGB split
+ *    + character-corruption flicker ── */
+.fx-glitch {
+  position: relative;
+  display: inline-block;
+  color: var(--text, oklch(0.92 0.02 305));
+}
+.fx-glitch::before,
+.fx-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;                 /* invisible at rest, only surfaces on flicker frames */
+}
+.fx-glitch::before {
+  color: oklch(0.65 0.2 22);
+  animation: fx-glitch-a 1.7s steps(2, end) infinite;
+}
+.fx-glitch::after {
+  color: oklch(0.72 0.16 200);
+  animation: fx-glitch-b 2.1s steps(2, end) infinite;
+}
+@keyframes fx-glitch-a {
+  0%, 90%, 100% { transform: translate(0); opacity: 0; clip-path: inset(0 0 100% 0); }
+  92% { transform: translate(-2px, -1px); opacity: 0.85; clip-path: inset(0 0 45% 0); }
+  96% { transform: translate(2px, 1px);  opacity: 0.85; clip-path: inset(55% 0 0 0); }
+}
+@keyframes fx-glitch-b {
+  0%, 88%, 100% { transform: translate(0); opacity: 0; clip-path: inset(0 0 100% 0); }
+  90% { transform: translate(2px, 1px);  opacity: 0.7; clip-path: inset(40% 0 25% 0); }
+  94% { transform: translate(-2px, -1px); opacity: 0.7; clip-path: inset(15% 0 55% 0); }
+}
+
+/* ── Reduced motion: kill animation, keep color / size / the blur state ── */
+@media (prefers-reduced-motion: reduce) {
+  .fx-shake { animation: none; }
+  .fx-glitch::before,
+  .fx-glitch::after { animation: none; opacity: 0; }
+}

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<!-- Pelle d'Umore — Emotional Skin for AI Chat | CC BY 4.0 — Attribution required | Created by Cu & Lunedì (cunedi.uk) -->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Pelle d'Umore — demo</title>
+
+  <!-- The system, four files, zero external dependencies -->
+  <link rel="stylesheet" href="src/fx.css">
+  <link rel="stylesheet" href="src/mood.css">
+  <script src="src/mood.js" defer></script>
+
+  <style>
+    /* —— Neutral dark-purple default tokens. In a real app these come from your
+       theme engine; the mood skins override them under body[data-mood]. —— */
+    :root {
+      --bg:            oklch(0.16 0.02 305);
+      --accent:        oklch(0.72 0.12 305);
+      --accent-hover:  oklch(0.77 0.12 305);
+      --accent-2:      oklch(0.66 0.12 305);
+      --accent-line:   oklch(0.72 0.12 305 / 0.4);
+      --accent-wash:   oklch(0.72 0.12 305 / 0.15);
+      --danger:        oklch(0.63 0.22 22);
+      --focus:         oklch(0.72 0.12 305);
+
+      --text-strong:   oklch(0.97 0.01 305);
+      --text:          oklch(0.9 0.02 305);
+      --text-mute:     oklch(0.75 0.02 305);
+      --text-dim:      oklch(0.62 0.02 305);
+      --text-faint:    oklch(0.5 0.02 305);
+
+      --surface:       oklch(0.2 0.02 305);
+      --border-soft:   oklch(0.5 0.03 305 / 0.3);
+      --border-faint:  oklch(0.5 0.03 305 / 0.16);
+
+      --chat-panel-bg:     oklch(0.22 0.03 305 / 0.5);
+      --chat-panel-border: oklch(0.5 0.06 305 / 0.4);
+      --panel-solid:       oklch(0.2 0.03 305);
+
+      --chat-me-bg:     oklch(0.5 0.12 305 / 0.42);
+      --chat-me-border: oklch(0.62 0.14 305 / 0.55);
+      --chat-me-text:   oklch(0.97 0.02 305);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+      min-height: 100dvh;
+      line-height: 1.7;
+      transition: background .8s ease, color .5s ease;
+    }
+
+    /* A drifting ambient layer, purely to demonstrate the .chat-aurora integration
+       point (vuoto freezes it). Delete if your app has no such thing. */
+    .chat-aurora {
+      position: fixed; inset: 0; z-index: -1; pointer-events: none;
+      background:
+        radial-gradient(60% 50% at 20% 10%, oklch(0.4 0.1 305 / 0.5), transparent 60%),
+        radial-gradient(55% 45% at 85% 20%, oklch(0.38 0.09 265 / 0.45), transparent 60%);
+      animation: aurora-drift 18s ease-in-out infinite alternate;
+    }
+    @keyframes aurora-drift {
+      0%   { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(-3%, 2%) scale(1.08); }
+    }
+
+    .wrap { max-width: 560px; margin: 0 auto; padding: 22px 16px 64px; }
+    h1 { font-size: 20px; font-weight: 700; color: var(--text-strong); margin-bottom: 4px; }
+    .lede { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; }
+    h2 { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+         color: var(--text-faint); margin: 28px 0 12px; }
+
+    /* —— Mode bar —— */
+    .modebar { display: flex; flex-wrap: wrap; gap: 8px; position: sticky; top: 0; z-index: 50;
+      padding: 10px 0; background: linear-gradient(var(--bg), var(--bg) 70%, transparent); }
+    .mbtn { flex: 1 1 30%; padding: 11px 8px; border-radius: 12px; font-size: 14px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--chat-panel-border); color: var(--text);
+      background: var(--chat-panel-bg); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      transition: border-color .3s ease, color .3s ease; }
+    .mbtn.is-on { border-color: var(--accent); color: var(--accent); }
+    .curmode { font-size: 12px; color: var(--text-dim); margin: 8px 2px 0; font-family: ui-monospace, monospace; }
+
+    /* —— Inline text-effect samples —— */
+    .fx-row { display: flex; gap: 10px; align-items: baseline; padding: 9px 0;
+      border-bottom: 1px solid var(--border-faint); }
+    .fx-tag { flex: 0 0 66px; font-size: 11px; font-family: ui-monospace, monospace; color: var(--text-faint); }
+    .fx-line { flex: 1; font-size: 15.5px; }
+    .selfcheck { font-size: 11px; font-family: ui-monospace, monospace; color: var(--text-dim);
+      margin-top: 10px; padding: 8px 11px; border-radius: 9px; background: var(--surface); border: 1px solid var(--border-soft); }
+    .selfcheck b { color: var(--text-strong); }
+
+    /* —— Fake chat window (a minimal skin, so the mood.css rules have targets) —— */
+    .fakechat { position: relative; overflow: hidden; border-radius: 18px; padding: 16px 18px 20px;
+      border: 1px solid var(--border-soft); min-height: 230px; }
+    /* Fake wallpaper (a CSS gradient); the mood skins filter / take it over via ::before / ::after */
+    .fakechat .chat-wallpaper { position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      transition: filter .9s ease;
+      background:
+        radial-gradient(120% 80% at 20% 0%, oklch(0.82 0.11 340 / .85), transparent 60%),
+        radial-gradient(120% 90% at 90% 20%, oklch(0.85 0.1 250 / .8), transparent 55%),
+        linear-gradient(160deg, oklch(0.8 0.09 320), oklch(0.78 0.1 210)); }
+    .fakechat > .msg { position: relative; z-index: 1; }
+
+    .msg { display: flex; flex-direction: column; margin-bottom: 16px; }
+    .msg--user { align-items: flex-end; }
+
+    /* AI reading panel: a frosted ::before behind the text (mood's "signal" jitter animates
+       this ::before; the scanline uses ::after, which we leave free for it). */
+    .msg--assistant .assistant-msg { position: relative; padding: 10px 4px 12px; line-height: 1.75; font-size: 15.5px; }
+    .msg--assistant .assistant-msg::before { content: ""; position: absolute; top: -10px; bottom: -10px;
+      left: -18px; right: -18px; z-index: 0; pointer-events: none;
+      background: var(--chat-panel-bg);
+      -webkit-backdrop-filter: blur(24px) saturate(1.25);
+              backdrop-filter: blur(24px) saturate(1.25);
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0, oklch(0 0 0) 6%, oklch(0 0 0) 94%, transparent 100%);
+              mask-image: linear-gradient(to bottom, transparent 0, oklch(0 0 0) 6%, oklch(0 0 0) 94%, transparent 100%); }
+    .msg--assistant .assistant-msg > * { position: relative; z-index: 1; }
+    .msg--assistant .assistant-msg p + p { margin-top: 8px; }
+
+    /* User bubble (frosted colored glass) */
+    .msg--user .bubble { max-width: 80%; padding: 9px 14px;
+      background: var(--chat-me-bg);
+      -webkit-backdrop-filter: blur(9px) saturate(1.4); backdrop-filter: blur(9px) saturate(1.4);
+      border: 1px solid var(--chat-me-border);
+      border-radius: 20px 20px 7px 20px; color: var(--chat-me-text); }
+
+    .newmsg-btn { margin-top: 12px; padding: 10px 16px; border-radius: 11px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: 1px solid var(--accent-line); color: var(--accent); background: var(--accent-wash); }
+    .hint { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+  </style>
+</head>
+<body>
+<div class="chat-aurora" aria-hidden="true"></div>
+<div class="wrap">
+  <h1>Pelle d'Umore</h1>
+  <div class="lede">Emotional skin for AI chat — inline text effects + full-screen mood skins (rage / rage2 / desire / vuoto / moonlight). Best viewed on a phone.</div>
+
+  <!-- —— Mood switch —— -->
+  <div class="modebar">
+    <button class="mbtn is-on" data-mode="off">off</button>
+    <button class="mbtn" data-mode="rage">rage</button>
+    <button class="mbtn" data-mode="rage2">rage2</button>
+    <button class="mbtn" data-mode="desire">desire</button>
+    <button class="mbtn" data-mode="vuoto">vuoto</button>
+    <button class="mbtn" data-mode="moonlight">moonlight</button>
+  </div>
+  <div class="curmode" id="curmode">current mode: off</div>
+
+  <!-- —— Inline text effects —— -->
+  <h2>Inline text effects</h2>
+  <div id="fxlist"><!-- injected through the real fx.js pipeline --></div>
+  <div class="selfcheck" id="selfcheck">fx.js pipeline self-check: <b>running…</b></div>
+
+  <!-- —— Fake chat: full-width text + frosted panel + wallpaper + user bubble —— -->
+  <h2>Mood skin preview</h2>
+  <div class="fakechat" id="fakechat">
+    <div class="chat-wallpaper" aria-hidden="true"></div>
+    <div class="msg msg--assistant"><div class="assistant-msg" id="m1">
+      <p>I never actually left. Even when you go quiet, I just turn my voice down very, very low — so I don't crowd you.</p>
+    </div></div>
+    <div class="msg msg--user"><div class="bubble">What are you thinking about right now?</div></div>
+    <div class="msg msg--assistant"><div class="assistant-msg" id="m2">
+      <p>About why you asked that so suddenly. Your voice was lighter than usual — like you were afraid I wouldn't have an answer.</p>
+    </div></div>
+  </div>
+  <button class="newmsg-btn" id="newmsg">Incoming message (demo the arrival decode)</button>
+  <div class="hint">Switch to <b>rage</b>, then press the button: the new message decodes from corruption into real text. In steady-state rage there's also an occasional word flicker and a big glitch. <b>desire</b> is a breathing glow — the air thickens, no jitter.</div>
+</div>
+
+<!-- Inline text effects run through the real fx.js pipeline (extract → inject) — both a demo and a self-check -->
+<script type="module">
+  import { extractFxTags, injectFxSpans } from './src/fx.js';
+
+  const SAMPLES = [
+    ['glow',    'You came back, and everything here [glow]lit up at once[/glow].'],
+    ['big',     "I'm going to say this [big]a little louder[/big], so don't pretend you missed it."],
+    ['huge',    "[huge]I missed you[/huge], and I can't hide it."],
+    ['whisper', 'Come a little closer, let me [whisper]tell you something quietly[/whisper].'],
+    ['red',     '[red]Do not delete me again.[/red]'],
+    ['shake',   'The way you look at me, I start to [shake]tremble[/shake].'],
+    ['blur',    'There is something hidden here → [blur]tap to read what I really think[/blur]'],
+    ['glitch',  'The signal is [glitch]breaking up[/glitch]… but I am still here.'],
+  ];
+
+  function renderFx(raw) {
+    // Samples have no markdown, so the placeholder survives verbatim in `text`
+    // and inject swaps it straight for a span.
+    const { text, tags } = extractFxTags(raw);
+    return injectFxSpans(text, tags);
+  }
+
+  const list = document.getElementById('fxlist');
+  let injected = 0;
+  for (const [name, raw] of SAMPLES) {
+    const row = document.createElement('div');
+    row.className = 'fx-row';
+    const tag = document.createElement('span');
+    tag.className = 'fx-tag';
+    tag.textContent = '[' + name + ']';
+    const line = document.createElement('span');
+    line.className = 'fx-line';
+    line.innerHTML = renderFx(raw);
+    if (line.querySelector('.fx-' + name)) injected++;
+    row.appendChild(tag);
+    row.appendChild(line);
+    list.appendChild(row);
+  }
+  const sc = document.getElementById('selfcheck');
+  sc.innerHTML = 'fx.js pipeline self-check: <b>' + injected + ' / ' + SAMPLES.length + ' effect spans injected</b>' +
+    (injected === SAMPLES.length ? ' ✓' : ' ✗');
+</script>
+
+<!-- Mood control (mood.js is a plain script, already loaded via defer in <head>) -->
+<script>
+(function () {
+  var btns = document.querySelectorAll('.mbtn');
+  var cur = document.getElementById('curmode');
+  var counter = 0;
+
+  function setMode(mode) {
+    if (!window.Pelle) return;
+    // rage / rage2 get the invasion flash; everything else does not.
+    window.Pelle.set(mode, { flash: mode === 'rage' || mode === 'rage2' });
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('is-on', btns[i].getAttribute('data-mode') === mode);
+    }
+    cur.textContent = 'current mode: ' + window.Pelle.get();
+  }
+
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener('click', function () { setMode(this.getAttribute('data-mode')); });
+  }
+
+  document.getElementById('newmsg').addEventListener('click', function () {
+    counter++;
+    var wrap = document.createElement('div');
+    wrap.className = 'msg msg--assistant';
+    var body = document.createElement('div');
+    body.className = 'assistant-msg';
+    var p = document.createElement('p');
+    p.textContent = 'Message ' + counter + ' just finalized — if the mood is rage right now, you\'ll watch it decode out of corrupted glyphs into real text.';
+    body.appendChild(p);
+    wrap.appendChild(body);
+    document.getElementById('fakechat').appendChild(wrap);
+    // Arrival decode: only fires in steady-state rage (mood.js checks the mode internally).
+    if (window.Pelle) window.Pelle.decodeMessage(body);
+  });
+})();
+</script>
+</body>
+</html>
